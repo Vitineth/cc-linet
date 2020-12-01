@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>CC Linet Control</title>
+
+    <link 
+        rel="stylesheet"
+        href="https://unpkg.com/bootstrap-material-design@4.1.1/dist/css/bootstrap-material-design.min.css"
+        integrity="sha384-wXznGJNEXNG1NFsbm0ugrLFMQPWswR3lds2VeinahP8N0zJw9VWSopbjv2x7WCvX" 
+        crossorigin="anonymous"
+    />
+
+    <link 
+        rel="stylesheet" 
+        href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css" 
+    />
+    
+    <script 
+        src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"
+    ></script>
+
+    <script 
+        src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"
+        integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg=="
+        crossorigin="anonymous"
+    ></script>
+    
+    <script 
+        src="https://unpkg.com/popper.js@1.12.6/dist/umd/popper.js"
+        integrity="sha384-fA23ZRQ3G/J53mElWqVJEGJzU0sTs+SvzG8fXVWP+kJQ1lwFAOkcUOysnlKJC33U"
+        crossorigin="anonymous"
+    ></script>
+
+    <script 
+        src="https://unpkg.com/bootstrap-material-design@4.1.1/dist/js/bootstrap-material-design.js"
+        integrity="sha384-CauSuKpEqAFajSpkdjv3z9t8E7RlpJ1UP0lKM/+NdtSarroVKu069AlsRPKkFBz9"
+        crossorigin="anonymous"
+    ></script>
+
+    <script>
+        $(document).ready(function () { $('body').bootstrapMaterialDesign(); });
+    </script>
+
+    <style>
+        .btn{
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>linet interface</h1>
+        <div class="row">
+            <div class="col-9">
+                <h2>
+                    Fixtures
+                </h2>
+                <div id="lights">
+                    <button type="button" class="btn btn-raised btn-info">Info</button>
+                    <button type="button" class="btn btn-raised btn-info">Info</button>
+                    <button type="button" class="btn btn-raised btn-info">Info</button>
+                    <button type="button" class="btn btn-raised btn-info">Info</button>
+                </div>
+            </div>
+            <div class="col">
+                <div id="static-control">
+                    <button type="button" id="static-on" class="btn btn-raised btn-success">on</button>
+                    <button type="button" id="static-off" class="btn btn-raised btn-danger">off</button>
+                </div>
+                <div id="5bit-control">
+                    <div class="color-picker"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const pickr = Pickr.create({
+            el: '.color-picker',
+            theme: 'monolith', // or 'monolith', or 'nano'
+
+            swatches: [
+                'rgba(244, 67, 54, 1)',
+                'rgba(233, 30, 99, 0.95)',
+                'rgba(156, 39, 176, 0.9)',
+                'rgba(103, 58, 183, 0.85)',
+                'rgba(63, 81, 181, 0.8)',
+                'rgba(33, 150, 243, 0.75)',
+                'rgba(3, 169, 244, 0.7)',
+                'rgba(0, 188, 212, 0.7)',
+                'rgba(0, 150, 136, 0.75)',
+                'rgba(76, 175, 80, 0.8)',
+                'rgba(139, 195, 74, 0.85)',
+                'rgba(205, 220, 57, 0.9)',
+                'rgba(255, 235, 59, 0.95)',
+                'rgba(255, 193, 7, 1)'
+            ],
+
+            components: {
+
+                // Main components
+                preview: true,
+                opacity: true,
+                hue: true,
+
+                // Input / output Options
+                interaction: {
+                    hex: true,
+                    rgba: true,
+                    hsla: true,
+                    hsva: true,
+                    cmyk: true,
+                    input: true,
+                    clear: true,
+                    save: true
+                }
+            }
+        });
+
+        $(() => {
+            let lastReceive = null;
+            let selected = null;
+
+            function generate(){
+                console.log("Change!");
+                console.log(lastReceive);
+
+                $("#lights").empty();
+
+                for(const [device, config] of Object.entries(lastReceive)){
+                    for(const light of Object.values(config)){
+                        if (light.type === "static"){
+                            const entry = $("<button>").addClass('btn btn-raised btn-info').attr('type', 'button').text(`${device}.${light.locator.side}.${light.locator.color}`);
+                            entry.click(() => {
+                                selected = {
+                                    device,
+                                    type: 'static',
+                                    locator: `${light.locator.side}.${light.locator.color}`,
+                                };
+
+                                $('#5bit-control').css('display', 'none');
+                                $('#static-control').css('display', 'block');
+                                console.log(selected);
+                            })
+                            
+                            $("#lights").append(entry);
+                        }else{
+                            const entry = $("<button>").addClass('btn btn-raised btn-success').attr('type', 'button').text(`${device}.${light.locator}`);
+                            entry.click(() => {
+                                selected = {
+                                    device,
+                                    type: '5bit',
+                                    locator: light.locator,
+                                };
+
+                                $('#5bit-control').css('display', 'block');
+                                $('#static-control').css('display', 'none');
+                                console.log(selected);
+                            })
+
+                            $("#lights").append(entry);
+                        }
+                    }
+                }
+            }
+
+            const ws = new WebSocket("ws://localhost:3000/web");
+
+
+            $("#static-on").click(() => {
+                if(selected !== null && selected['type'] === "static"){
+                    // send [to]-->ctrl--[data]
+                    const value = btoa(`${selected.type}.${selected.locator}=1`);
+                    const sendString = `${selected.device}@@ctrl==${value}`;
+                    ws.send(sendString);
+                    
+                }
+            })
+
+            $("#static-off").click(() => {
+                if(selected !== null && selected['type'] === "static"){
+                    const value = btoa(`${selected.type}.${selected.locator}=0`);
+                    const sendString = `${selected.device}@@ctrl==${value}`;
+                    ws.send(sendString);
+                }
+            })
+
+            const pad = (s, l) => {
+                while(s.length < l) s = '0' + s;
+                return s;
+            }
+
+            const p5 = (s) => pad(s, 5);
+
+            pickr.on('change', (v) => {
+                if(selected === null) return;
+                if(selected['type'] !== "5bit") return;
+
+                let [r, g, b] = v.toRGBA();
+
+                r = Math.floor(r * 0.1215686274509804).toString(2);
+                g = Math.floor(g * 0.1215686274509804).toString(2);
+                b = Math.floor(b * 0.1215686274509804).toString(2);
+
+                console.log(r, g, b);
+
+                const bin = `${p5(r)}${p5(g)}${p5(b)}`;
+
+                console.log(bin);
+                
+                const value = btoa(`${selected.type}.${selected.locator}=${bin}`);
+                const sendString = `${selected.device}@@ctrl==${value}`;
+                ws.send(sendString);
+            })
+
+            ws.onopen = () => {
+                console.log('Websocket open');
+            }
+
+            ws.onmessage = (m) => {
+                const lights = JSON.parse(m.data);
+                delete lights['_count'];
+
+                for(const [device, config] of Object.entries(lights)){
+                    delete config['lastPing'];
+                }
+
+                if (lastReceive === null){
+                    lastReceive = lights;
+                    generate();
+                    return;
+                }
+
+                if (JSON.stringify(lastReceive) !== JSON.stringify(lights)){
+                    lastReceive = lights;
+                    generate();
+                    return;
+                }
+            }
+
+        })
+    </script>
+</body>
+
+</html>
